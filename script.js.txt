@@ -1,0 +1,152 @@
+const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+  width: document.getElementById('chart').offsetWidth,
+  height: 500,
+  layout: {
+    backgroundColor: '#ffffff',
+    textColor: '#000',
+  },
+  grid: {
+    vertLines: { color: '#eee' },
+    horzLines: { color: '#eee' },
+  },
+});
+
+const candleSeries = chart.addCandlestickSeries();
+const emaFastSeries = chart.addLineSeries({ color: 'blue', lineWidth: 2 });
+const emaSlowSeries = chart.addLineSeries({ color: 'red', lineWidth: 2 });
+
+let cData = [];
+let currentIndex = 50; // Bắt đầu hiển thị từ nến thứ 50
+let replayInterval = null;
+
+// Hàm tính EMA
+function calculateEMA(data, period) {
+  let k = 2 / (period + 1);
+  let emaArray = [];
+  let ema = data[0].close;
+
+  data.forEach((d, i) => {
+    if (i === 0) {
+      emaArray.push(ema);
+    } else {
+      ema = d.close * k + ema * (1 - k);
+      emaArray.push(ema);
+    }
+  });
+  return emaArray;
+}
+
+// Backtest từng bước
+function updateChart(index) {
+  if (index < 50) return; // Hiển thị ít nhất 50 nến để tính EMA
+
+  const partialData = cData.slice(0, index);
+  const emaFast = calculateEMA(partialData, 9);
+  const emaSlow = calculateEMA(partialData, 21);
+
+  candleSeries.setData(partialData);
+  emaFastSeries.setData(partialData.map((d, i) => ({
+    time: d.time,
+    value: emaFast[i],
+  })));
+  emaSlowSeries.setData(partialData.map((d, i) => ({
+    time: d.time,
+    value: emaSlow[i],
+  })));
+
+  // Tìm tín hiệu Buy/Sell
+  let signals = [];
+  for (let i = 1; i < partialData.length; i++) {
+    if (emaFast[i - 1] < emaSlow[i - 1] && emaFast[i] > emaSlow[i]) {
+      signals.push({ time: partialData[i].time, type: 'buy', price: partialData[i].close });
+    } else if (emaFast[i - 1] > emaSlow[i - 1] && emaFast[i] < emaSlow[i]) {
+      signals.push({ time: partialData[i].time, type: 'sell', price: partialData[i].close });
+    }
+  }
+
+  // Vẽ tín hiệu
+  signals.forEach(signal => {
+    chart.addShape({
+      time: signal.time,
+      position: signal.type === 'buy' ? 'belowBar' : 'aboveBar',
+      shape: signal.type === 'buy' ? 'arrowUp' : 'arrowDown',
+      color: signal.type === 'buy' ? 'green' : 'red',
+      text: signal.type.toUpperCase(),
+    });
+  });
+
+  // Cập nhật kết quả
+  let balance = 1000;
+  let position = null;
+  let entryPrice = 0;
+  let win = 0;
+  let loss = 0;
+
+  signals.forEach(signal => {
+    if (signal.type === 'buy' && position === null) {
+      entryPrice = signal.price;
+      position = 'long';
+    } else if (signal.type === 'sell' && position === 'long') {
+      let profit = (signal.price - entryPrice) / entryPrice * 100;
+      balance *= (1 + profit / 100);
+      if (profit > 0) win++;
+      else loss++;
+      position = null;
+    }
+  });
+
+  let totalTrades = win + loss;
+  let winrate = totalTrades ? (win / totalTrades * 100).toFixed(2) : 0;
+  document.getElementById('stats').innerHTML = `
+    📈 Tổng lệnh: ${totalTrades}<br>
+    ✅ Thắng: ${win}<br>
+    ❌ Thua: ${loss}<br>
+    🏆 Winrate: ${winrate}%<br>
+    💰 Balance: $${balance.toFixed(2)}
+  `;
+}
+
+// Replay điều khiển
+document.getElementById('backward').onclick = () => {
+  if (currentIndex > 50) {
+    currentIndex--;
+    updateChart(currentIndex);
+  }
+};
+
+document.getElementById('forward').onclick = () => {
+  if (currentIndex < cData.length) {
+    currentIndex++;
+    updateChart(currentIndex);
+  }
+};
+
+document.getElementById('play').onclick = () => {
+  if (replayInterval) clearInterval(replayInterval);
+  replayInterval = setInterval(() => {
+    if (currentIndex < cData.length) {
+      currentIndex++;
+      updateChart(currentIndex);
+    } else {
+      clearInterval(replayInterval);
+    }
+  }, 500); // tốc độ replay (ms)
+};
+
+document.getElementById('pause').onclick = () => {
+  if (replayInterval) clearInterval(replayInterval);
+};
+
+// Fetch dữ liệu
+fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=500')
+  .then(res => res.json())
+  .then(data => {
+    cData = data.map(d => ({
+      time: d[0] / 1000,
+      open: parseFloat(d[1]),
+      high: parseFloat(d[2]),
+      low: parseFloat(d[3]),
+      close: parseFloat(d[4]),
+    }));
+    updateChart(currentIndex);
+  });

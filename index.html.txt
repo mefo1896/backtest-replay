@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Backtest Replay</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <h1>Backtest Replay Chart</h1>
+
+  <div id="chart"></div>
+
+  <div id="controls">
+    <button id="backward">⏪ Back</button>
+    <button id="play">▶️ Play</button>
+    <button id="pause">⏸ Pause</button>
+    <button id="forward">⏩ Next</button>
+  </div>
+
+  <div id="result">
+    <h2>Kết quả Backtest</h2>
+    <p id="stats">Chưa có dữ liệu.</p>
+  </div>
+
+  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
